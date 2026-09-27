@@ -15,7 +15,9 @@
 # _SYS = "server_01"
 
 # 服务器01生产环境(阿里云OSS)
-_SYS = "server_02"
+import os
+# ★ docker: 可用环境变量 CH_SYS 覆盖(容器内为 "home"), 未设置时保持原值
+_SYS = os.getenv("CH_SYS", "server_02")
 
 # 测试服务器环境
 # _SYS = "test_server"
@@ -24,7 +26,7 @@ _SYS = "server_02"
 # _SYS = "home"
 
 #local server name
-_SYS_SERVER_NAME = "chserver_01"
+_SYS_SERVER_NAME = os.getenv("CH_SERVER_NAME", "chserver_01")
 
 if __name__ == "__main__":
     # import pdb

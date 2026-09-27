@@ -46,7 +46,7 @@ REDIS_WRITE_HOST = {
     "server_01":"127.0.0.1", 
     "server_02":"127.0.0.1", 
     "test_server":"127.0.0.1",
-    "home":"192.168.100.100",
+    "home":os.getenv("CH_REDIS_HOST", "192.168.100.100"),
     }[_SYS]
 
 REDIS_WRITE_PORT = {
@@ -71,7 +71,7 @@ REDIS_READ_HOST = {
     "server_01":"127.0.0.1", 
     "server_02":"127.0.0.1", 
     "test_server":"127.0.0.1",
-    "home":"192.168.100.100",
+    "home":os.getenv("CH_REDIS_HOST", "192.168.100.100"),
     }[_SYS]
     
 REDIS_READ_PORT = {

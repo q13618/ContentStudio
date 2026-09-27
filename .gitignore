@@ -37,3 +37,8 @@ logs/
 .vscode/
 .DS_Store
 Thumbs.db
+.env
+docker/backend/pw-cache/*
+!docker/backend/pw-cache/.keep
+docker/certs/*
+!docker/certs/.keep

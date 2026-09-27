@@ -1,0 +1,7 @@
+.git
+.env
+code/webserver/node_modules
+code/webserver/dist
+code/data
+plan
+doc/*.pdf

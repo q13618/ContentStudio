@@ -49,8 +49,8 @@ MCP_SERVER_PORT = 8891
 MCP_TRANSPORT = "streamable-http"
 
 #contentHub REST服务默认访问地址(入口为 main/chAPI.py 的 /chapi/<urlPath>)
-CH_SERVER_HOST = "127.0.0.1"
-CH_SERVER_PORT = 80
+CH_SERVER_HOST = os.getenv("CH_MCP_UPSTREAM_HOST", "127.0.0.1")
+CH_SERVER_PORT = int(os.getenv("CH_MCP_UPSTREAM_PORT", "80"))
 CH_SERVER_ROOT_PATH = ""
 
 #contentHub 服务sessionID, 优先从环境变量读取, 其次使用默认账号

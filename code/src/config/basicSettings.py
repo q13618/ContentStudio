@@ -46,7 +46,7 @@ _HOME_DIR = {
     "server_01":r"/data/contenthub",
     "server_02":r"/data/contenthub",
     "test_server":r"/data/contenthub",
-    "home":r"../..",
+    "home":os.getenv("CH_HOME_DIR", r"../.."),
     }[_SYS]
 
 _DATA_DIR = {
@@ -71,7 +71,7 @@ ACCOUNT_SERVICE_URL ={
     "server_01":"http://127.0.0.1:8160/acis",
     "server_02":"http://127.0.0.1:8160/acis",
     "test_server":"http://127.0.0.1:8160/acis",
-    "home":"http://127.0.0.1:8160/acis",
+    "home":os.getenv("CH_ACCOUNT_SERVICE_URL", "http://127.0.0.1:8160/acis"),
 }[_SYS]
 
 
@@ -81,7 +81,7 @@ CH_SERVER_HOST ={
     "server_01":"www.test.com",
     "server_02":"www.test.net",
     "test_server":"www.test.com",
-    "home":"192.168.5.100",
+    "home":os.getenv("CH_SERVER_HOST", "192.168.5.100"),
 }[_SYS]
 
 
@@ -150,7 +150,7 @@ LOCAL_WEBSERVER_ROOT_PATH ={
     "server_01":"https://www.test.com/",
     "server_02":"https://www.test.net/",
     "test_server":"https://www.test.com/",
-    "home":"http://192.168.5.100/",
+    "home":os.getenv("CH_PUBLIC_BASE_URL", "http://192.168.5.100/"),
 }[_SYS]
 
 #local server path
@@ -199,7 +199,7 @@ GEN_DIGIST_KEY ={
     "server_01":"your_securet",
     "server_02":"your_securet",
     "test_server":"your_securet",
-    "home":"your_securet",
+    "home":os.getenv("CH_GEN_DIGIST_KEY", "your_securet"),
 }[_SYS]
 
 #file server upload url dataSet, 注意这个是一个字典
@@ -208,7 +208,7 @@ FILE_UPLOAD_URL ={
     "server_01":"http://www.test.com/upload",
     "server_02":"http://www.test.net/upload",
     "test_server":"http://www.test.com/upload",
-    "home":"http://192.168.5.100/upload",
+    "home":os.getenv("CH_FILE_UPLOAD_URL", "http://192.168.5.100/upload"),
 }[_SYS]
 
 #file server url dataSet, 注意这个是一个字典(按 serverName 取, 与 funcCommon.fileServerRequest 对齐)
@@ -217,7 +217,7 @@ FILE_SERVER_URL ={
     "server_01":"http://www.test.com/hfile",
     "server_02":"http://www.test.net/hfile",
     "test_server":"http://www.test.com/hfile",
-    "home":"http://192.168.5.100/hfile",
+    "home":os.getenv("CH_FILE_SERVER_URL", "http://192.168.5.100/hfile"),
 }
 
 

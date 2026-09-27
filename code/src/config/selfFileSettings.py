@@ -45,7 +45,7 @@ _HOME_DIR = {
     "server_01":r"/data/contenthub",
     "server_02":r"/data/contenthub",
     "test_server":r"/data/contenthub",
-    "home":r"..",
+    "home":os.getenv("CH_HOME_DIR", r".."),
     }[_SYS]
 
 
@@ -57,7 +57,7 @@ LOCAL_FILE_SERVER_PATH ={
     "server_01":f"https://www.iottest.online/{LOCAL_FILE_SERVER_DIR_NAME}/",
     "server_02":f"https://mindgram.iottest.online/{LOCAL_FILE_SERVER_DIR_NAME}/",
     "test_server":f"https://www.iottest.online/{LOCAL_FILE_SERVER_DIR_NAME}/",
-    "home":f"http://192.168.100.100/{LOCAL_FILE_SERVER_DIR_NAME}/",
+    "home":os.getenv("CH_PUBLIC_BASE_URL", "http://192.168.100.100/").rstrip("/") + f"/{LOCAL_FILE_SERVER_DIR_NAME}/",
 }[_SYS]
 
 #local server path, local 环境指向本项目 <code>/data/webserver/temp/, 保证本地可跑

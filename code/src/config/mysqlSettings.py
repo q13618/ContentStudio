@@ -36,7 +36,7 @@ MYSQL_WRITE_HOST = {
     "server_01":"127.0.0.1",
     "server_02":"rm-f8zd6012efm91y10d.mysql.rds.aliyuncs.com",
     "test_server":"127.0.0.1",
-    "home":"192.168.100.100",
+    "home":os.getenv("CH_MYSQL_HOST", "192.168.100.100"),
     }[_SYS]
 
 MYSQL_WRITE_PORT = {
@@ -44,7 +44,7 @@ MYSQL_WRITE_PORT = {
     "server_01":3306,
     "server_02":3306,
     "test_server":3306,
-    "home":3306,
+    "home":int(os.getenv("CH_MYSQL_PORT", "3306")),
     }[_SYS]
 
 MYSQL_WRITE_DB = {
@@ -52,7 +52,7 @@ MYSQL_WRITE_DB = {
     "server_01":"contenthub_data",
     "server_02":"contenthub_data",
     "test_server":"contenthub_test",
-    "home":"contenthub_data",
+    "home":os.getenv("CH_MYSQL_DB", "contenthub_data"),
     }[_SYS]
 
 MYSQL_WRITE_USER = {
@@ -60,7 +60,7 @@ MYSQL_WRITE_USER = {
     "server_01":"your_account",
     "server_02":"your_account",
     "test_server":"your_account",
-    "home":"your_account",
+    "home":os.getenv("CH_MYSQL_USER", "your_account"),
     }[_SYS]
 
 #口令: 环境变量 CH_MYSQL_WRITE_PASSWD 优先, 未设置时仅本地/家庭环境回落开发默认值;
@@ -79,7 +79,7 @@ MYSQL_READ_HOST = {
     "server_01":"127.0.0.1",
     "server_02":"rm-f8zd6012efm91y10d.mysql.rds.aliyuncs.com",
     "test_server":"127.0.0.1",
-    "home":"192.168.100.100",
+    "home":os.getenv("CH_MYSQL_HOST", "192.168.100.100"),
     }[_SYS]
 
 MYSQL_READ_PORT = {
@@ -87,7 +87,7 @@ MYSQL_READ_PORT = {
     "server_01":3306,
     "server_02":3306,
     "test_server":3306,
-    "home":3306,
+    "home":int(os.getenv("CH_MYSQL_PORT", "3306")),
     }[_SYS]
 
 MYSQL_READ_DB = {
@@ -95,7 +95,7 @@ MYSQL_READ_DB = {
     "server_01":"contenthub_data",
     "server_02":"contenthub_data",
     "test_server":"contenthub_test",
-    "home":"contenthub_data",
+    "home":os.getenv("CH_MYSQL_DB", "contenthub_data"),
     }[_SYS]
 
 MYSQL_READ_USER = {
@@ -103,7 +103,7 @@ MYSQL_READ_USER = {
     "server_01":"your_account",
     "server_02":"your_account",
     "test_server":"your_account",
-    "home":"your_account",
+    "home":os.getenv("CH_MYSQL_USER", "your_account"),
     }[_SYS]
 
 #口令: 环境变量 CH_MYSQL_READ_PASSWD 优先, 未设置时回落写库口令
