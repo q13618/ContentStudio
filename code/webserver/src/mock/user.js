@@ -193,10 +193,17 @@ export const handlers = {
 
   chkuserexist: (body) => ({ data: { loginID: body.loginID || '', exist: USERS.some((item) => item.loginID === body.loginID) ? '1' : '0' } }),
 
-  smsrequest: () => ({ data: { success: '1', expireSeconds: 300 } }),
-  smsverify: (body) => (String(body.smsCode || '') === '000000'
-    ? { data: { success: '1' } }
-    : { __err: { code: 'C4', content: '验证码不正确（Mock 固定为 000000）' } }),
+  smsrequest: (body) => ({ data: { success: '1', expireSeconds: 300, email: body.email || '', ttl: 600, cooldown: 60 } }),
+  // 带 email 时模拟「邮箱验证码登录」（docker/accountsvc A7A0）：校验通过即回 sessionID
+  smsverify: (body) => {
+    const code = String(body.code || body.smsCode || '')
+    if (code !== '000000') return { __err: { code: 'BM', content: '验证码不正确（Mock 固定为 000000）' } }
+    if (!body.email) return { data: { success: '1' } }
+    const role = VALID_ROLES.includes(body.devRole) ? body.devRole : 'administrator'
+    const sessionID = `mock-${role}-${Date.now()}`
+    sessions.set(sessionID, { role, loginID: body.email })
+    return { data: { sessionID, loginID: body.email, realName: PROFILES[role].realName, roleName: role, mock: '1' } }
+  },
   resetpasswd: () => ({ data: { success: '1' } }),
 
   generalnext: (body, ctx) => ctx.nextBuffer(body),

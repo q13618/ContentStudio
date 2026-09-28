@@ -31,6 +31,12 @@ export const chkUserExist = (params) => svc.post('/chkuserexist', params)
 export const smsRequest = (params) => svc.post('/smsrequest', params)
 export const smsVerify = (params) => svc.post('/smsverify', params)
 export const resetPasswd = (params) => svc.post('/resetpasswd', params)
+/**
+ * 邮箱验证码登录（Resend 发信，docker/accountsvc 的 A6A0 / A7A0；复用 smsrequest / smsverify 通道）。
+ * silent：错误由登录页按 errCode 行内提示，不再弹全局 toast。
+ */
+export const emailCodeRequest = (params) => svc.post('/smsrequest', params, { silent: true })
+export const emailCodeLogin = (params) => svc.post('/smsverify', params, { silent: true })
 /** 用户增 / 改 / 删（仅 administrator · manager，§2.9.8） */
 export const userAdd = (params) => svc.post('/useradd', params)
 export const userModify = (params) => svc.post('/usermodify', params)
