@@ -675,6 +675,11 @@ def funcSMSVerify(CMD, dataSet, sessionIDSet):
         if isinstance(rtnData, dict):
             result = rtnData
 
+        #验证码登录成功(账号服务回 sessionID, 如 docker/accountsvc 的邮箱验证码登录): 与 login 同路落库 USER_BASIC
+        if errCode == "B0" and result.get("sessionID") and result.get("loginID"):
+            _saveMsg2Queue("login", {"loginID": result.get("loginID")},
+                           _genSyncRtnData(result, errCode), result.get("loginID"))
+
         result = apiCommon.genRtnResult(CMD, errCode, errCode, lang, rtnData = result)
 
     except Exception as e:

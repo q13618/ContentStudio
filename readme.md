@@ -198,6 +198,7 @@ npm run build    # 产出 dist/
 - `FILE_SYSTEM_MODE` ∈ `{ALIOSS, TENCENT, SELFFILE}` —— 文件后端三态切换，**代码经 `common/fileStorageCommon.py` 门面，禁止硬编码分支**。
 - `mysqlSettings` / `redisSettings` / `aliyunSettings` / `tencentSettings` / `wechatSettings` / `mcpConfig` —— 各能力配置。
 - 凭据加密：`common/credentialCipher.py`（AES-256-GCM，SP4a·C6 投递链路）。
+- 登录：Docker 部署自带 `accountsvc` 账号服务，支持账号口令与 **Resend 邮箱验证码登录**（配置 `RESEND_API_KEY` 等，详见 [`docker/README.md`](docker/README.md)）。
 
 ---
 

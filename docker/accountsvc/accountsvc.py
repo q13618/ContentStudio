@@ -13,7 +13,8 @@
 #   A0A0 登录 / 注册(建号)   A2A0 生成会话     A3A0 用户信息     A5A0 登出
 #   A9A0 重置口令            AEA0 修改角色     AIA0 用户存在性   GAA0 会话 + 功能清单
 #   G1A0 / G2A0 用户自定义数据
-#   A6A0 / A7A0 短信(不支持, 返回 BS)
+#   A6A0 / A7A0 邮箱验证码登录(经 Resend 发信; 复用原「短信验证」通道 smsrequest/smsverify,
+#               contentHub 后端零改动即可转发)
 #
 # 安全:
 #   - 口令: 前端送来的是 md5(passwd + loginID) 摘要, 本服务再做 PBKDF2-SHA256(随机盐) 后存储;
@@ -29,6 +30,7 @@ import secrets
 import time
 
 import redis
+import requests
 from flask import Flask, Response, request
 
 application = Flask(__name__)
@@ -40,6 +42,20 @@ SESSION_TTL = int(os.getenv("ACIS_SESSION_TTL", str(7 * 24 * 3600)))
 ALLOW_REGISTRATION = os.getenv("ACIS_ALLOW_REGISTRATION", "0") == "1"
 DEFAULT_ROLE = os.getenv("ACIS_DEFAULT_ROLE", "operator")
 
+# ---- 邮箱验证码登录(Resend) ----
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+RESEND_FROM = os.getenv("RESEND_FROM", "").strip() or "contentHub <onboarding@resend.dev>"
+RESEND_API_URL = os.getenv("RESEND_API_URL", "https://api.resend.com/emails")
+EMAIL_CODE_TTL = int(os.getenv("ACIS_EMAIL_CODE_TTL", "600"))          # 验证码有效期(秒)
+EMAIL_CODE_COOLDOWN = int(os.getenv("ACIS_EMAIL_CODE_COOLDOWN", "60"))  # 同一邮箱两次发送最小间隔
+EMAIL_CODE_HOURLY_MAX = int(os.getenv("ACIS_EMAIL_CODE_HOURLY_MAX", "10"))   # 同一邮箱每小时上限
+EMAIL_CODE_IP_HOURLY_MAX = int(os.getenv("ACIS_EMAIL_CODE_IP_HOURLY_MAX", "30"))  # 同一 IP 每小时上限
+EMAIL_CODE_MAX_TRY = int(os.getenv("ACIS_EMAIL_CODE_MAX_TRY", "5"))    # 单个验证码最多校验次数
+# 这些域名的邮箱首次验证即自动建号(逗号分隔, 如 "example.com,example.cn"); 为空则只有已登记邮箱可登录
+EMAIL_ALLOWED_DOMAINS = {x.strip().lower().lstrip("@") for x in
+                         os.getenv("ACIS_EMAIL_ALLOWED_DOMAINS", "").split(",") if x.strip()}
+APP_NAME = os.getenv("ACIS_APP_NAME", "内容中枢")
+
 VALID_ROLES = ["administrator", "manager", "operator", "customer", "visitor"]
 ADMIN_ROLES = ["administrator", "manager"]
 
@@ -48,6 +64,10 @@ _db = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB, decode_response
 _K_USER = "acis:user:"
 _K_SESSION = "acis:session:"
 _K_UDATA = "acis:udata:"
+_K_EMAIL = "acis:email:"          # email -> loginID 索引
+_K_ECODE = "acis:ecode:"          # 验证码(哈希) + 已校验次数
+_K_ECOOL = "acis:ecode:cool:"     # 发送冷却
+_K_ECNT = "acis:ecode:cnt:"       # 每小时发送计数(邮箱 / IP)
 _PBKDF2_ROUNDS = 200_000
 
 
@@ -101,6 +121,8 @@ def _createUser(loginID, digest, roleName, extra=None):
         "regYMDHMS": _now(),
     }
     _db.hset(_K_USER + loginID, mapping=data)
+    if data["email"]:
+        _db.set(_K_EMAIL + _normEmail(data["email"]), loginID)
     return data
 
 
@@ -249,13 +271,127 @@ def cmdGetUserData(d):
     return _ok(key=key, val=json.loads(raw) if raw else "")
 
 
+# ------------------------------------------------------------------ 邮箱验证码登录
+def _normEmail(email):
+    return str(email or "").strip().lower()
+
+
+def _validEmail(email):
+    if not email or len(email) > 254 or email.count("@") != 1:
+        return False
+    local, domain = email.split("@")
+    return bool(local) and "." in domain and not domain.startswith(".") and not domain.endswith(".") \
+        and not any(c.isspace() for c in email)
+
+
+def _loginIDByEmail(email):
+    """邮箱 -> loginID: 先查索引, 再兼容 loginID 本身就是邮箱的账号。"""
+    loginID = _db.get(_K_EMAIL + email)
+    if loginID and _getUser(loginID):
+        return loginID
+    if _getUser(email):
+        return email
+    return ""
+
+
+def _canAutoRegister(email):
+    return ALLOW_REGISTRATION or email.split("@")[1] in EMAIL_ALLOWED_DOMAINS
+
+
+def _codeHash(email, code):
+    return hashlib.sha256(f"{email}:{code}".encode("utf-8")).hexdigest()
+
+
+def _hitLimit(key, limit, window=3600):
+    n = _db.incr(key)
+    if n == 1:
+        _db.expire(key, window)
+    return n > limit
+
+
+def _sendEmailCode(email, code):
+    minutes = max(1, EMAIL_CODE_TTL // 60)
+    subject = f"{APP_NAME} 登录验证码: {code}"
+    text = f"你的 {APP_NAME} 登录验证码是 {code}, {minutes} 分钟内有效。如非本人操作请忽略本邮件。"
+    html = (f'<div style="font-family:sans-serif;font-size:14px;color:#222">'
+            f'<p>你的 <b>{APP_NAME}</b> 登录验证码:</p>'
+            f'<p style="font-size:28px;font-weight:bold;letter-spacing:6px">{code}</p>'
+            f'<p style="color:#888">{minutes} 分钟内有效。如非本人操作请忽略本邮件。</p></div>')
+    if not RESEND_API_KEY:
+        # 未配置 Resend: 开发模式, 验证码只打到容器日志(docker compose logs accountsvc)
+        print(f"[accountsvc] RESEND_API_KEY 未配置, 开发模式验证码 {email}: {code}", flush=True)
+        return True
+    r = requests.post(RESEND_API_URL, timeout=15,
+                      headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+                      json={"from": RESEND_FROM, "to": [email], "subject": subject, "text": text, "html": html})
+    if r.status_code >= 300:
+        application.logger.error("resend send failed: %s %s", r.status_code, r.text[:300])
+        return False
+    return True
+
+
+def cmdEmailCodeRequest(d):
+    """A6A0: 向邮箱发送 6 位登录验证码。入参 email(兼容 loginID 字段)。
+       错误码: BA 邮箱格式错 / BE 邮箱未登记且不允许自动建号 / BN 发送过频或发送失败(reason 字段说明)。"""
+    email = _normEmail(d.get("email") or d.get("loginID"))
+    if not _validEmail(email):
+        return _err("BA")
+    if not _loginIDByEmail(email) and not _canAutoRegister(email):
+        return _err("BE")
+    if _db.exists(_K_ECOOL + email):
+        return _err("BN", reason="cooldown", retryAfter=_db.ttl(_K_ECOOL + email))
+    ip = str(d.get("_IP", "")).strip()
+    if _hitLimit(_K_ECNT + "mail:" + email, EMAIL_CODE_HOURLY_MAX) or \
+            (ip and _hitLimit(_K_ECNT + "ip:" + ip, EMAIL_CODE_IP_HOURLY_MAX)):
+        return _err("BN", reason="rate_limited")
+    code = f"{secrets.randbelow(10**6):06d}"
+    _db.set(_K_ECOOL + email, "1", ex=EMAIL_CODE_COOLDOWN)
+    if not _sendEmailCode(email, code):
+        _db.delete(_K_ECOOL + email)
+        return _err("BN", reason="send_failed")
+    _db.set(_K_ECODE + email, json.dumps({"h": _codeHash(email, code), "n": 0}), ex=EMAIL_CODE_TTL)
+    return _ok(email=email, ttl=EMAIL_CODE_TTL, cooldown=EMAIL_CODE_COOLDOWN)
+
+
+def cmdEmailCodeVerify(d):
+    """A7A0: 校验邮箱验证码 -> 登录(必要时自动建号) -> 返回 sessionID + 用户信息(与 A0A0 登录同形)。
+       错误码: BA 邮箱格式错 / BM 验证码错误或已过期 / BE 邮箱未登记且不允许自动建号。"""
+    email = _normEmail(d.get("email") or d.get("loginID"))
+    code = str(d.get("code") or d.get("verifyCode") or "").strip()
+    if not _validEmail(email):
+        return _err("BA")
+    raw = _db.get(_K_ECODE + email)
+    if not raw or not code:
+        return _err("BM")
+    rec = json.loads(raw)
+    if not secrets.compare_digest(rec.get("h", ""), _codeHash(email, code)):
+        rec["n"] = int(rec.get("n", 0)) + 1
+        if rec["n"] >= EMAIL_CODE_MAX_TRY:
+            _db.delete(_K_ECODE + email)
+        else:
+            _db.set(_K_ECODE + email, json.dumps(rec), keepttl=True)
+        return _err("BM")
+    _db.delete(_K_ECODE + email)
+    loginID = _loginIDByEmail(email)
+    if loginID:
+        user = _getUser(loginID)
+    elif _canAutoRegister(email):
+        # 无口令账号: 存一个随机摘要占位, 口令登录永远无法命中; 只能走邮箱验证码
+        user = _createUser(email, secrets.token_hex(32), DEFAULT_ROLE,
+                           {"email": email, "nickName": email.split("@")[0]})
+    else:
+        return _err("BE")
+    sid = _newSession(user)
+    return _ok(sessionID=sid, **_publicUser(user))
+
+
 def cmdNotSupported(d):
     return _err("BS")
 
 
 CMD_MAP = {
     "A0A0": cmdLogin, "A2A0": cmdGenSession, "A3A0": cmdUserInfo, "A5A0": cmdLogout,
-    "A6A0": cmdNotSupported, "A7A0": cmdNotSupported, "A9A0": cmdResetPasswd,
+    "A6A0": cmdEmailCodeRequest, "A7A0": cmdEmailCodeVerify, "A9A0": cmdResetPasswd,
     "AEA0": cmdModifyRole, "AIA0": cmdUserExist, "GAA0": cmdSessionCmdList,
     "G1A0": cmdSaveUserData, "G2A0": cmdGetUserData,
 }
@@ -283,16 +419,29 @@ def healthz():
 
 
 def bootstrapAdmin():
+    """首次启动建管理员:
+       - ACIS_ADMIN_LOGINID + ACIS_ADMIN_PASSWD: 口令登录的管理员(可同时登记 ACIS_ADMIN_EMAIL);
+       - 仅 ACIS_ADMIN_EMAIL: 以邮箱为 loginID 的无口令管理员, 只能邮箱验证码登录。"""
     loginID = os.getenv("ACIS_ADMIN_LOGINID", "").strip()
     plain = os.getenv("ACIS_ADMIN_PASSWD", "")
-    if not loginID or not plain:
+    email = _normEmail(os.getenv("ACIS_ADMIN_EMAIL", ""))
+    if email and not _validEmail(email):
+        print(f"[accountsvc] ACIS_ADMIN_EMAIL 格式无效, 已忽略: {email}", flush=True)
+        email = ""
+    if loginID and plain:
+        user = _getUser(loginID)
+        if not user:
+            # 与前端一致: digest = md5(passwd + loginID)
+            digest = hashlib.md5(f"{plain}{loginID}".encode("utf-8")).hexdigest()
+            _createUser(loginID, digest, "administrator", {"nickName": "管理员", "email": email})
+            print(f"[accountsvc] bootstrap administrator created: {loginID}", flush=True)
+        elif email and not _loginIDByEmail(email):
+            _db.hset(_K_USER + loginID, "email", email)
+            _db.set(_K_EMAIL + email, loginID)
         return
-    if _getUser(loginID):
-        return
-    # 与前端一致: digest = md5(passwd + loginID)
-    digest = hashlib.md5(f"{plain}{loginID}".encode("utf-8")).hexdigest()
-    _createUser(loginID, digest, "administrator", {"nickName": "管理员"})
-    print(f"[accountsvc] bootstrap administrator created: {loginID}", flush=True)
+    if email and not _loginIDByEmail(email):
+        _createUser(email, secrets.token_hex(32), "administrator", {"nickName": "管理员", "email": email})
+        print(f"[accountsvc] bootstrap administrator created (email login): {email}", flush=True)
 
 
 for _i in range(30):

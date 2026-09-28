@@ -22,7 +22,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import { md5 } from 'js-md5'
 import { getAccessToken, setAccessToken, removeAccessToken } from '@/utils/accessToken'
-import { login as loginApi, getUserInfo as getUserInfoApi, logout as logoutApi } from '@/api/user'
+import { login as loginApi, getUserInfo as getUserInfoApi, logout as logoutApi, emailCodeLogin as emailCodeLoginApi } from '@/api/user'
 import { router, resetRouter } from '@/router'
 
 /** 五个角色（后端 roleName 取值；顺序即登录页开发态下拉顺序） */
@@ -157,6 +157,22 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /**
+   * 邮箱验证码登录：校验成功后账号服务直接回 sessionID（与口令登录同形），之后流程与 login 一致。
+   * `role` 同 login，仅 Mock 模式附加 devRole。
+   */
+  async function loginByEmailCode({ email = '', code = '', role = '' } = {}) {
+    const payload = { email, code }
+    if (USE_MOCK) payload.devRole = VALID_ROLES.includes(role) ? role : DEFAULT_DEV_ROLE
+    const res = await emailCodeLoginApi(payload)
+    const data = res?.data || {}
+    if (!data.sessionID) throw new Error('登录失败：未取得会话标识')
+    accessToken.value = data.sessionID
+    setAccessToken(data.sessionID)
+    await getInfo()
+    return data
+  }
+
+  /**
    * 拉取当前用户信息。失败即按 B8 口径清会话（Step 3 由 http.js 拦截器统一处理 B8）并抛错，
    * 由调用方（路由守卫 / 登录页）决定后续跳转。
    */
@@ -216,6 +232,7 @@ export const useUserStore = defineStore('user', () => {
     isInitFinished,
     waitInitFinished,
     login,
+    loginByEmailCode,
     getInfo,
     logout,
     hasRole,

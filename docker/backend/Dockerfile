@@ -5,6 +5,12 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 # 可选: 锁定 playwright 版本(与离线浏览器缓存配套时使用)
 ARG PLAYWRIGHT_VERSION=""
+# 可选: 国内机房加速(如阿里云大陆 ECS), 在 .env 里设置, 留空 = 官方源
+#   APT_MIRROR=http://mirrors.aliyun.com   PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+#   PLAYWRIGHT_DOWNLOAD_HOST=<Playwright 浏览器下载镜像>
+ARG APT_MIRROR=""
+ARG PIP_INDEX_URL=""
+ARG PLAYWRIGHT_DOWNLOAD_HOST=""
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -20,7 +26,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 # 可选: 企业代理/内网根证书(把 *.crt 放进 docker/certs/ 即可, 默认为空)
 COPY docker/certs/ /usr/local/share/ca-certificates/extra/
-RUN apt-get update \
+RUN if [ -n "$APT_MIRROR" ]; then \
+      sed -i "s|http://archive.ubuntu.com|$APT_MIRROR|g; s|http://security.ubuntu.com|$APT_MIRROR|g" /etc/apt/sources.list.d/ubuntu.sources; \
+    fi \
+ && if [ -n "$PIP_INDEX_URL" ]; then printf '[global]\nindex-url = %s\n' "$PIP_INDEX_URL" > /etc/pip.conf; fi \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
       python3 python3-venv python3-pip ca-certificates tzdata curl fonts-noto-cjk \
  && update-ca-certificates \
@@ -37,7 +47,8 @@ COPY docker/backend/pw-cache/ /ms-playwright/
 RUN apt-get update \
  && python -m playwright install-deps chromium \
  && if ls /ms-playwright | grep -q '^chromium'; then echo "use offline chromium cache"; \
-    else python -m playwright install chromium; fi \
+    else if [ -n "$PLAYWRIGHT_DOWNLOAD_HOST" ]; then export PLAYWRIGHT_DOWNLOAD_HOST; else unset PLAYWRIGHT_DOWNLOAD_HOST; fi; \
+         python -m playwright install chromium; fi \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /data/contenthub/src

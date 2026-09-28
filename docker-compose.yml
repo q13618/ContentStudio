@@ -8,6 +8,9 @@ x-backend: &backend
     dockerfile: docker/backend/Dockerfile
     args:
       PLAYWRIGHT_VERSION: ${PLAYWRIGHT_VERSION:-}
+      APT_MIRROR: ${APT_MIRROR:-}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-}
+      PLAYWRIGHT_DOWNLOAD_HOST: ${PLAYWRIGHT_DOWNLOAD_HOST:-}
   image: contenthub-backend:latest
   restart: unless-stopped
   env_file: .env
@@ -80,6 +83,11 @@ services:
       ACIS_ADMIN_LOGINID: ${CH_ADMIN_LOGINID:-admin}
       ACIS_ADMIN_PASSWD: ${CH_ADMIN_PASSWD}
       ACIS_ALLOW_REGISTRATION: ${CH_ALLOW_REGISTRATION:-0}
+      # 邮箱验证码登录(Resend); RESEND_API_KEY 为空时验证码只打印到本容器日志(开发模式)
+      ACIS_ADMIN_EMAIL: ${CH_ADMIN_EMAIL:-}
+      ACIS_EMAIL_ALLOWED_DOMAINS: ${CH_EMAIL_ALLOWED_DOMAINS:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
     depends_on:
       redis: { condition: service_healthy }
 
@@ -129,6 +137,9 @@ services:
     build:
       context: .
       dockerfile: docker/web/Dockerfile
+      args:
+        VITE_PASSWORD_LOGIN: ${CH_PASSWORD_LOGIN:-true}
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
     image: contenthub-web:latest
     restart: unless-stopped
     ports:
